@@ -1,0 +1,13 @@
+/all
+/apache
+/composer-setup.php
+/composer.json
+/composer.lock
+/composer.phar
+/docker-compose.yml
+/mariadb
+/nagios
+/newachats.sql
+/tes.php
+/vendor
+/webfolder
