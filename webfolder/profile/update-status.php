@@ -1,18 +1,25 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Pastikan transId diterima dengan benar
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['transId'])) {
     $transId = $_POST['transId'];
-    $status = $_POST['status'];
 
     try {
-        $query = "UPDATE purchases SET status = ? WHERE transId = ?";
+        // Update status transaksi menjadi 'paid'
+        $query = "UPDATE purchases SET status = 'paid' WHERE transId = ?";
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$status, $transId]);
+        $stmt->execute([$transId]);
 
-        echo json_encode(['success' => true, 'message' => 'Status transaksi diperbarui']);
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'Status transaksi berhasil diperbarui!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Tidak ada transaksi dengan ID tersebut!']);
+        }
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan: ' . $e->getMessage()]);
     }
+} else {
+    echo json_encode(['success' => false, 'message' => 'transId tidak ditemukan!']);
 }
 ?>

@@ -7,6 +7,6 @@ composer.phar
 docker-compose.yml
 /mariadb
 /nagios
-newachats.sql
+
 /tes.php
 /vendor
