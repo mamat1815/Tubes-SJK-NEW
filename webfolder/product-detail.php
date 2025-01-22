@@ -1,18 +1,6 @@
 <?php
 session_start();
 require_once 'config/config.php';
-if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
-    die('File vendor/autoload.php tidak ditemukan. Pastikan Composer sudah dijalankan.');
-}
-require_once __DIR__ . '/vendor/autoload.php';
-
-// require_once 'vendor/autoload.php'; // Midtrans library
-
-// Konfigurasi Midtrans
-\Midtrans\Config::$serverKey = 'SB-Mid-server-jGwdUeyFWGE4Kz-HQ4uhexCY';
-\Midtrans\Config::$isProduction = false;
-\Midtrans\Config::$isSanitized = true;
-\Midtrans\Config::$is3ds = true;
 
 // Ambil ID produk dari URL
 $productId = $_GET['id'] ?? null;
@@ -70,76 +58,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_now'])) {
     }
 
     $totalAmount = $product['price'] * $quantity;
+    $transId = uniqid('Product-');
 
-    // Data transaksi untuk Midtrans
-    $transactionDetails = [
-        'order_id' => uniqid('ORDER-'),
-        'gross_amount' => $totalAmount,
-    ];
-
-    $itemDetails = [
-        [
-            'id' => $product['productId'],
-            'price' => $product['price'],
-            'quantity' => $quantity,
-            'name' => $product['name'],
-        ]
-    ];
-
-    $customerDetails = [
-        'first_name' => $user['fullName'],
-        'email' => $user['email'],
-        'phone' => $user['number'],
-        'billing_address' => [
-            'first_name' => $user['fullName'],
-            'address' => $user['address'],
-            'city' => 'Kota Anda',
-            'postal_code' => '12345',
-            'phone' => $user['number'],
-            'country_code' => 'IDN',
-        ],
-    ];
-
-    // Generate Snap Token
-    $snapToken = \Midtrans\Snap::getSnapToken([
-        'transaction_details' => $transactionDetails,
-        'item_details' => $itemDetails,
-        'customer_details' => $customerDetails,
-    ]);
-
-    // Masukkan data transaksi ke tabel purchases
+    // Simpan data transaksi ke tabel purchases
     try {
-        $purchaseQuery = "INSERT INTO purchases (userId, productId, quantity, amountTotal, status, purchaseDate, transId) VALUES (?, ?, ?, ?, ?, NOW(), ?)";
+        $purchaseQuery = "INSERT INTO purchases (transId, userId, productId, quantity, amountTotal, status, purchaseDate) VALUES (?, ?, ?, ?, ?, ?, NOW())";
         $stmtPurchase = $pdo->prepare($purchaseQuery);
         $stmtPurchase->execute([
+            $transId,
             $userId,
             $product['productId'],
             $quantity,
             $totalAmount,
-            'pending',
-            $transactionDetails['order_id']
+            'pending'
         ]);
+
+        // Kurangi stok produk dan tambahkan jumlah terjual
+        $updateStockQuery = "UPDATE products SET stock = stock - ?, sold = sold + ? WHERE productId = ?";
+        $stmtUpdateStock = $pdo->prepare($updateStockQuery);
+        $stmtUpdateStock->execute([$quantity, $quantity, $productId]);
     } catch (PDOException $e) {
         echo 'Error: ' . $e->getMessage();
         exit();
     }
-    
-    
-
-    // Kurangi stok produk dan tambahkan jumlah terjual
-    $updateStockQuery = "UPDATE products SET stock = stock - ?, sold = sold + ? WHERE productId = ?";
-    $stmtUpdateStock = $pdo->prepare($updateStockQuery);
-    $stmtUpdateStock->execute([$quantity, $quantity, $productId]);
-
-    // Masukkan data transaksi ke tabel transactions
-    $transactionQuery = "INSERT INTO transactions (sellerId, status, amount, created_at) VALUES (?, ?, ?, NOW())";
-    $stmtTransaction = $pdo->prepare($transactionQuery);
-    $stmtTransaction->execute([
-        $product['sellerId'], // sellerId dari produk
-        'initialized',        // Status awal transaksi
-        $totalAmount          // Jumlah total transaksi
-    ]);
-
 }
 ?>
 
@@ -150,7 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_now'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detail Produk - <?php echo htmlspecialchars($product['name']); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="SB-Mid-client-SpDoGrdSAGp4NAiK"></script>
 </head>
 <body>
     <?php require 'assets/components/navbar.php'; ?>
@@ -211,23 +151,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_now'])) {
             </div>
         </div>
     </div>
-
-    <?php if (isset($snapToken)): ?>
-        <script>
-            snap.pay('<?php echo $snapToken; ?>', {
-                onSuccess: function(result) {
-                    alert('Pembayaran berhasil!');
-                    window.location.href = 'success.php?order_id=<?php echo $transactionDetails['order_id']; ?>';
-                },
-                onPending: function(result) {
-                    alert('Menunggu pembayaran.');
-                },
-                onError: function(result) {
-                    alert('Pembayaran gagal!');
-                }
-            });
-        </script>
-    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
